@@ -1,0 +1,15 @@
+{
+  "name": "@nodpeak/widget",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The one-line embed script. Zero dependencies, ES2017 output, shadow-DOM isolated.",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.3"
+  }
+}

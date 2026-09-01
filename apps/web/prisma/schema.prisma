@@ -1,0 +1,285 @@
+// ─────────────────────────────────────────────────────────────
+//  Nodpeak data model
+//
+//  SQLite by design: one file, no daemon, no connection pool,
+//  trivially backed up by Litestream to S3/R2. Enough for tens of
+//  thousands of reviews per install.
+//
+//  SQLite has no native ENUM type, so plan/sentiment are stored as
+//  TEXT and constrained in application code — see src/lib/enums.ts,
+//  which is the single source of truth for the allowed values.
+// ─────────────────────────────────────────────────────────────
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  /// "FREE" | "HOSTED" — see Plan in src/lib/enums.ts
+  plan         String   @default("FREE")
+
+  // Billing linkage, written by the payment webhook.
+  planProvider   String?
+  planExternalId String?
+  planExpiresAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+
+  @@index([planExternalId])
+}
+
+model Project {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name   String
+  /// Bare hostname, e.g. "acmeplumbing.com" — no scheme, no path.
+  domain String
+
+  // Where a happy reviewer gets sent.
+  googlePlaceId  String?
+  trustpilotSlug String?
+
+  /// Optional POST target fired on every new review.
+  webhookUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  widgetConfig     WidgetConfig?
+  siteWidgetConfig SiteWidgetConfig?
+  reviews          Review[]
+  seoAudits        SeoAudit[]
+  leads            Lead[]
+  emailSubscribers EmailSubscriber[]
+  linkChecks       LinkCheck[]
+  uptimeChecks     UptimeCheck[]
+  uptimeMonitor    UptimeMonitor?
+
+  @@index([userId])
+  @@index([domain])
+}
+
+model WidgetConfig {
+  id        String  @id @default(cuid())
+  projectId String  @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  primaryColor String @default("#0A0B0D")
+  accentColor  String @default("#25D6E8")
+
+  title          String @default("How did we do?")
+  subtitle       String @default("Your feedback takes 10 seconds.")
+  promptQuestion String @default("Tell us a little more")
+
+  /// Ratings at or above this go to Google/Trustpilot.
+  /// Below it, feedback stays private and routes to support.
+  minStarForExternal Int @default(1)
+
+  /// Render the "Reviews by Nodpeak" badge — the open-source growth loop.
+  showSeoBadge Boolean @default(true)
+
+  /// "bubble" | "inline" — see WidgetPlacement in src/lib/enums.ts
+  placement String @default("bubble")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Review {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// 1–5, validated in the API layer.
+  rating        Int
+  customerName  String?
+  customerEmail String?
+  comment       String?
+
+  /// "POSITIVE" | "NEUTRAL" | "NEGATIVE" — see Sentiment in src/lib/enums.ts
+  sentiment String @default("NEUTRAL")
+
+  /// Only public reviews feed the AggregateRating schema and the widget wall.
+  isPublic Boolean @default(false)
+
+  /// True once the reviewer was handed off to Google/Trustpilot.
+  redirectedExternal Boolean @default(false)
+
+  /// Hand-picked for the testimonials wall — distinct from isPublic, which
+  /// only gates the aggregate rating and the widget's own review list.
+  featuredForWall Boolean @default(false)
+
+  sourceUrl String?
+  userAgent String?
+  ipHash    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([projectId, isPublic])
+  @@index([projectId, featuredForWall])
+  @@index([ipHash, createdAt])
+}
+
+model SeoAudit {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  url   String
+  /// 0–100 composite.
+  score Int
+  /// 0–100. Real Lighthouse number when PAGESPEED_API_KEY is set,
+  /// otherwise a local heuristic from page weight and blocking assets.
+  mobileSpeed      Int     @default(0)
+  missingMetaCount Int     @default(0)
+  schemaValid      Boolean @default(false)
+
+  /// JSON array of {id, label, severity, detail} — the findings list.
+  findingsJson String @default("[]")
+
+  lastCheckedAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([projectId, lastCheckedAt])
+}
+
+// ── Get customers ───────────────────────────────────────────
+
+model Lead {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name    String?
+  email   String?
+  phone   String?
+  message String
+
+  /// "NEW" | "READ" | "ARCHIVED" — see LeadStatus in src/lib/enums.ts
+  status String @default("NEW")
+
+  sourceUrl String?
+  createdAt DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([projectId, status])
+}
+
+model EmailSubscriber {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  email     String
+  sourceUrl String?
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, email])
+  @@index([projectId, createdAt])
+}
+
+/// One row per project. Config for the on-site chrome pieces the embed
+/// script renders alongside the review widget: announcement bar, WhatsApp
+/// button, email capture popup, trust bar, contact/quote form. Kept as one
+/// model (mirrors WidgetConfig's shape) so the public config endpoint stays
+/// a single cached read.
+model SiteWidgetConfig {
+  id        String  @id @default(cuid())
+  projectId String  @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  announcementEnabled  Boolean @default(false)
+  announcementText     String  @default("")
+  announcementLinkUrl  String?
+  announcementLinkText String?
+  announcementBg       String  @default("#25D6E8")
+  announcementFg       String  @default("#0A0B0D")
+
+  whatsappEnabled Boolean @default(false)
+  whatsappNumber  String?
+  whatsappMessage String  @default("Hi! I have a question.")
+
+  emailCaptureEnabled  Boolean @default(false)
+  emailCaptureTitle    String  @default("Get 10% off your first order")
+  emailCaptureSubtitle String  @default("Join the list — no spam, unsubscribe anytime.")
+  emailCaptureDelayMs  Int     @default(4000)
+
+  /// JSON array of {icon, label} — e.g. {"icon":"shield","label":"Secure checkout"}
+  trustBarEnabled   Boolean @default(false)
+  trustBarItemsJson String  @default("[]")
+
+  contactFormEnabled Boolean @default(false)
+  contactFormTitle   String  @default("Get a quote")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ── Get found ────────────────────────────────────────────────
+
+model LinkCheck {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  url         String
+  totalLinks  Int
+  brokenCount Int
+
+  /// JSON array of {url, status, text} for every broken link found.
+  findingsJson String @default("[]")
+
+  lastCheckedAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([projectId, lastCheckedAt])
+}
+
+model UptimeMonitor {
+  id        String  @id @default(cuid())
+  projectId String  @unique
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  enabled         Boolean @default(false)
+  url             String?
+  notifyEmail     String?
+  intervalMinutes Int     @default(5)
+
+  /// "UP" | "DOWN" — null until the first check runs.
+  lastStatus       String?
+  lastCheckedAt    DateTime?
+  consecutiveFails Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model UptimeCheck {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  ok         Boolean
+  statusCode Int?
+  latencyMs  Int?
+  error      String?
+  checkedAt  DateTime @default(now())
+
+  @@index([projectId, checkedAt])
+}

@@ -1,0 +1,15 @@
+# Continuous SQLite replication to S3-compatible storage (Cloudflare R2,
+# Backblaze B2, AWS S3, MinIO). Only used when LITESTREAM_ENABLED=true.
+dbs:
+  - path: /data/nodpeak.db
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_BUCKET}
+        path: nodpeak
+        endpoint: ${LITESTREAM_ENDPOINT}
+        region: ${LITESTREAM_REGION}
+        access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+        retention: 720h
+        snapshot-interval: 6h
+        sync-interval: 10s

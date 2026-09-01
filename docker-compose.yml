@@ -1,0 +1,104 @@
+# ─────────────────────────────────────────────────────────────
+#  Nodpeak — self-host stack
+#    app      Next.js dashboard + API + widget.js  (SQLite on a volume)
+#    nginx    TLS termination, gzip, CORS for /widget.js
+#    certbot  Let's Encrypt issuance + renewal
+#
+#  Quickstart:  cp .env.example .env && docker compose up -d
+# ─────────────────────────────────────────────────────────────
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/arm64
+    image: nodpeak:latest
+    container_name: nodpeak-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: file:/data/nodpeak.db
+    volumes:
+      - nodpeak_data:/data
+    expose:
+      - "3000"
+    networks:
+      - nodpeak
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          # A ceiling, so a traffic spike here cannot starve anything else
+          # sharing the host. Raise it on a dedicated box.
+          cpus: "1.5"
+          memory: 1G
+        reservations:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nodpeak-nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # The official image substitutes templates into conf.d at start-up.
+      # Mounting straight into conf.d and rewriting it in a custom command
+      # cannot work — the mount is read-only and cannot be replaced from
+      # inside the container.
+      - ./nginx/default.conf:/etc/nginx/templates/default.conf.template:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+      - nginx_cache:/var/cache/nginx
+    networks:
+      - nodpeak
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      # Substitute ONLY $DOMAIN. Without this filter the entrypoint expands
+      # every environment variable it can see, and any stray env var sharing a
+      # name with an nginx variable ($host, $scheme, $request_uri) would be
+      # silently blanked out of the config.
+      NGINX_ENVSUBST_FILTER: "^DOMAIN$$"
+
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: nodpeak-certbot
+    restart: unless-stopped
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    # Wake every 12h and renew anything inside 30 days of expiry.
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;"
+
+volumes:
+  nodpeak_data:
+    name: nodpeak_data
+  certbot_conf:
+    name: nodpeak_certbot_conf
+  certbot_www:
+    name: nodpeak_certbot_www
+  nginx_cache:
+    name: nodpeak_nginx_cache
+
+networks:
+  nodpeak:
+    name: nodpeak
+    driver: bridge

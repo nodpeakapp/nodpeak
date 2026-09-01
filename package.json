@@ -1,0 +1,25 @@
+{
+  "name": "nodpeak",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Open-core local-business growth toolkit — reviews, SEO, and site widgets. Self-host it or use the managed cloud.",
+  "license": "AGPL-3.0-or-later",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "dev": "npm run build --workspace=@nodpeak/widget && npm run dev --workspace=@nodpeak/web",
+    "build": "npm run build --workspace=@nodpeak/widget && npm run build --workspace=@nodpeak/web",
+    "build:widget": "npm run build --workspace=@nodpeak/widget",
+    "start": "npm run start --workspace=@nodpeak/web",
+    "db:generate": "npm run db:generate --workspace=@nodpeak/web",
+    "db:push": "npm run db:push --workspace=@nodpeak/web",
+    "db:studio": "npm run db:studio --workspace=@nodpeak/web",
+    "lint": "npm run lint --workspace=@nodpeak/web",
+    "typecheck": "npm run typecheck --workspace=@nodpeak/web && npm run typecheck --workspace=@nodpeak/widget"
+  }
+}

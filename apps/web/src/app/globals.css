@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-surface-950 text-zinc-100 antialiased;
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    background-image:
+      radial-gradient(60rem 40rem at 50% -10rem, rgba(37, 214, 232, 0.05), transparent 60%);
+    background-repeat: no-repeat;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-sora), var(--font-inter), ui-sans-serif, sans-serif;
+  }
+
+  ::selection {
+    @apply bg-cyan-500/30 text-zinc-50;
+  }
+
+  *:focus-visible {
+    @apply outline-none ring-2 ring-cyan-500/70 ring-offset-2 ring-offset-surface-950;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-surface-800 bg-surface-900;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5
+           text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-cyan-500 text-surface-950 hover:shadow-glow;
+  }
+
+  .btn-ghost {
+    @apply btn border border-surface-700 bg-transparent text-zinc-200 hover:border-zinc-500 hover:bg-surface-850;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-surface-700 bg-surface-950/60 px-3.5 py-2.5
+           text-sm text-zinc-100 placeholder:text-zinc-600
+           focus:border-transparent focus:ring-2 focus:ring-cyan-500/70;
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-zinc-400;
+    font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+    letter-spacing: 0.08em;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-surface-700
+           px-2.5 py-1 text-xs font-medium text-zinc-300;
+    font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  }
+}

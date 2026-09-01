@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────────────
+#  Nodpeak — deployment on an existing Coolify host
+#
+#  Use this INSTEAD of docker-compose.yml when you already have a
+#  reverse proxy terminating TLS. Coolify supplies the proxy, the
+#  certificate and the routing, so nginx and certbot are dropped and
+#  only the app remains.
+#
+#  In Coolify: New Resource → Docker Compose → point at this file,
+#  set the domain, and paste the environment variables.
+#
+#  The important part is `deploy.resources.limits`. On a shared box
+#  this container physically cannot take more than its allowance, so a
+#  traffic spike on Nodpeak cannot starve whatever else is running
+#  there. Raise the numbers when the box is dedicated to it.
+# ─────────────────────────────────────────────────────────────
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nodpeak:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: file:/data/nodpeak.db
+    volumes:
+      - nodpeak_data:/data
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          # A hard ceiling, not a target. Node + SQLite idles near 150 MB;
+          # this leaves generous headroom while guaranteeing the container
+          # cannot consume a neighbour's CPU or memory.
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  nodpeak_data:
+    name: nodpeak_data

@@ -1,0 +1,49 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# builds
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# database (SQLite lives in a mounted volume in production)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+data/
+apps/web/prisma/dev.db*
+
+# prisma generated client
+apps/web/src/generated/
+.prisma/
+
+# env
+.env
+.env.local
+.env.production
+.env.*.local
+!.env.example
+
+# certs / secrets
+certbot/
+letsencrypt/
+*.pem
+*.key
+!nginx/*.conf
+
+# logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,25 @@
+# Build context hygiene — without this the whole node_modules tree and every
+# previous .next build get shipped to the daemon on every `docker build`.
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+.git
+.gitignore
+*.md
+!README.md
+.env
+.env.*
+!.env.example
+data
+*.db
+*.db-*
+certbot
+letsencrypt
+.DS_Store
+.vscode
+.idea
+npm-debug.log*
+seed-tmp.mjs
