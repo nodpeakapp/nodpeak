@@ -31,12 +31,15 @@ export function WidgetForm({
   action,
   hasGoogle,
   hasTrustpilot,
+  canHideBadge,
 }: {
   projectId: string;
   config: Config;
   action: (prev: State, fd: FormData) => Promise<State>;
   hasGoogle: boolean;
   hasTrustpilot: boolean;
+  /** Only a paying HOSTED subscriber can remove the "Reviews by Nodpeak" credit. */
+  canHideBadge: boolean;
 }) {
   const [state, formAction] = useActionState(action, { error: null } as State);
   const [minStar, setMinStar] = useState<number>(config.minStarForExternal);
@@ -131,15 +134,26 @@ export function WidgetForm({
         </p>
       )}
 
-      <label className="mt-4 flex w-fit cursor-pointer items-center gap-2 text-sm text-zinc-300">
+      <label
+        className={`mt-4 flex w-fit items-center gap-2 text-sm ${
+          canHideBadge ? "cursor-pointer text-zinc-300" : "cursor-not-allowed text-zinc-500"
+        }`}
+      >
         <input
           type="checkbox"
           name="showSeoBadge"
-          defaultChecked={config.showSeoBadge}
+          defaultChecked={canHideBadge ? config.showSeoBadge : true}
+          disabled={!canHideBadge}
           className="h-4 w-4 accent-cyan-500"
         />
         Show the &ldquo;Reviews by Nodpeak&rdquo; badge
       </label>
+      {!canHideBadge && (
+        <p className="mt-2 text-xs leading-relaxed text-zinc-500">
+          Part of the free plan — it&rsquo;s what keeps self-hosting free for everyone. Upgrade
+          to the hosted plan to remove it.
+        </p>
+      )}
 
       {state.error && (
         <p role="alert" className="mt-4 rounded-lg border border-red-900/60 bg-red-950/40 px-3 py-2 text-sm text-red-300">

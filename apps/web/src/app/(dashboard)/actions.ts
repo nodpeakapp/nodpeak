@@ -171,10 +171,15 @@ export async function updateWidgetAction(
     return { error: "Project not found" };
   }
 
+  // Only a paying HOSTED subscriber can actually turn the "Reviews by
+  // Nodpeak" credit off — see widget-config/[id]/route.ts for why. Force
+  // it back on here so the saved value never lies about what's live.
+  const data = user.plan === "HOSTED" ? parsed.data : { ...parsed.data, showSeoBadge: true };
+
   await prisma.widgetConfig.upsert({
     where: { projectId },
-    create: { projectId, ...parsed.data },
-    update: parsed.data,
+    create: { projectId, ...data },
+    update: data,
   });
 
   invalidate(`widget-config:${projectId}`);

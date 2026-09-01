@@ -76,6 +76,7 @@ export default async function WidgetsPage({
         action={updateWidgetAction}
         hasGoogle={Boolean(active.googlePlaceId)}
         hasTrustpilot={Boolean(active.trustpilotSlug)}
+        canHideBadge={user.plan === "HOSTED"}
       />
     </div>
   );

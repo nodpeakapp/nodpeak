@@ -52,12 +52,25 @@ export async function GET(
   const payload = await cached(`widget-config:${projectId}`, WIDGET_CONFIG_TTL_MS, async () => {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
-      include: { widgetConfig: true, siteWidgetConfig: true },
+      include: {
+        widgetConfig: true,
+        siteWidgetConfig: true,
+        user: { select: { plan: true } },
+      },
     });
     if (!project) return null;
 
     const cfg = project.widgetConfig;
     const site = project.siteWidgetConfig;
+
+    // The "Reviews by Nodpeak" credit is the free tier's half of the deal,
+    // not a customer preference: it's what pays for every self-hosted
+    // install being free forever. Only a paying HOSTED subscriber can turn
+    // it off — everyone else's toggle is decorative until they upgrade.
+    // (On a selfhost deployment every user's `plan` stays "FREE" by design,
+    // since there is no billing to ever flip it — so this also means every
+    // self-hosted install keeps the credit on, which is the intended deal.)
+    const showBadge = project.user.plan === "HOSTED" ? (cfg?.showSeoBadge ?? true) : true;
 
     const publicReviews = await prisma.review.findMany({
       where: { projectId, isPublic: true, rating: { gte: 1, lte: 5 } },
@@ -103,7 +116,7 @@ export async function GET(
       subtitle: cfg?.subtitle ?? "Your feedback takes 10 seconds.",
       promptQuestion: cfg?.promptQuestion ?? "Tell us a little more",
       minStarForExternal: cfg?.minStarForExternal ?? 1,
-      showSeoBadge: cfg?.showSeoBadge ?? true,
+      showSeoBadge: showBadge,
       placement: isWidgetPlacement(cfg?.placement) ? cfg!.placement : "bubble",
 
       googleReviewUrl: googleReviewUrl(project.googlePlaceId),
