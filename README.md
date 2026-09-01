@@ -1,6 +1,6 @@
 <div align="center">
 
-# Nodpeak
+<img src="docs/banner.png" alt="Nodpeak — ask at the right moment, send the happy ones to Google" width="100%">
 
 **Ask at the right moment. Send the happy ones to Google.**
 
@@ -10,12 +10,48 @@ to a private form that reaches you instead of the internet.
 
 Self-host it on a free ARM box, or let us run it for $10/mo.
 
+[![CI](https://github.com/nodpeakapp/nodpeak/actions/workflows/ci.yml/badge.svg)](https://github.com/nodpeakapp/nodpeak/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-f59e0b.svg)](https://www.gnu.org/licenses/agpl-3.0)
 ![Widget size](https://img.shields.io/badge/widget-%3C15KB%20gzipped-f59e0b)
 ![Runs on](https://img.shields.io/badge/runs%20on-1%20ARM%20container-f59e0b)
 ![Database](https://img.shields.io/badge/database-SQLite%20%2B%20Litestream-f59e0b)
 
 </div>
+
+---
+
+## See it working
+
+<table>
+<tr>
+<td width="50%">
+
+**The widget, on a customer's site**
+<img src="docs/screenshots/widget-open.png" alt="Nodpeak review widget open on a demo café site, showing a five-star rating prompt">
+
+</td>
+<td width="50%">
+
+**Your dashboard**
+<img src="docs/screenshots/dashboard.png" alt="Nodpeak dashboard overview showing rating, review count, Google result preview, and latest reviews">
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Moderation — default-deny**
+<img src="docs/screenshots/reviews.png" alt="Nodpeak reviews inbox with approve, feature, and unpublish actions">
+
+</td>
+<td width="50%">
+
+**Embed code, generated for you**
+<img src="docs/screenshots/widgets.png" alt="Nodpeak widget configuration page showing the one-line embed snippet and appearance settings">
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -353,10 +389,19 @@ Every variable is documented inline in [`.env.example`](.env.example). The ones 
 
 ## Contributing
 
-Issues and pull requests welcome. `npm run typecheck` and `npm run build` must pass; the
-widget build enforces its own size budget.
+Issues and pull requests welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for local setup and
+what's in scope. This project follows a [Code of Conduct](CODE_OF_CONDUCT.md). Found a security
+issue? Please read [`SECURITY.md`](SECURITY.md) instead of opening a public issue.
 
 ## License
 
 [AGPL-3.0](LICENSE). Self-host it, fork it, run an agency on it. If you offer it as a hosted
 service, the AGPL asks you to publish your modifications.
+
+---
+
+<div align="center">
+
+Built by [Nouman Sadiq](https://noumansadiq.com)
+
+</div>

@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Typecheck & build
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: file:./ci.db
+      AUTH_SECRET: ci-only-secret-not-for-real-use-00000000000000000000
+      APP_URL: http://localhost:3000
+      NODE_ENV: production
+      DEPLOYMENT_MODE: selfhost
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.9"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate --workspace=@nodpeak/web
+
+      - name: Push schema to a throwaway SQLite DB
+        run: npm run db:push --workspace=@nodpeak/web
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build (widget size budget enforced here — fails over 15KB gzipped)
+        run: npm run build
