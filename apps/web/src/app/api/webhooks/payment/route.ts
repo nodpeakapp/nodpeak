@@ -6,18 +6,40 @@
  *
  * Three rules this endpoint does not bend:
  *
- *   1. **Verify before parsing meaning.** The HMAC is checked against the raw
- *      request body, before the JSON is trusted for anything. An unsigned or
- *      mis-signed request is rejected with 401 and nothing is written.
+ *   1. **Verify before parsing meaning.** The signature is checked against the
+ *      raw request body, before the JSON is trusted for anything. An unsigned
+ *      or mis-signed request is rejected with 401 and nothing is written.
  *   2. **Constant-time comparison.** A `===` on signature strings leaks the
  *      correct value one byte at a time to a patient attacker.
- *   3. **No secret, no service.** If PAYMENT_WEBHOOK_SECRET is unset the
- *      endpoint returns 503 rather than accepting everything. A billing
- *      webhook that fails open grants free upgrades to anyone who can POST.
+ *   3. **No secret, no service.** If a provider's secret is unset the endpoint
+ *      returns 503 for that provider rather than accepting everything. A
+ *      billing webhook that fails open grants free upgrades to anyone who can
+ *      POST.
  *
- * Providers differ in payload shape, so `normalize()` maps the handful that
- * matter onto one internal event. Adding a provider means adding a case there
- * and nothing else.
+ * Two signing schemes are handled, because Polar doesn't sign the way the
+ * others do:
+ *
+ *   - **Polar** sends the "Standard Webhooks" headers (`webhook-id`,
+ *     `webhook-timestamp`, `webhook-signature`) and signs
+ *     `{id}.{timestamp}.{raw body}` with HMAC-SHA256, using a base64-encoded
+ *     secret, base64-encoded output, and a `v1,<sig>` prefix (possibly several,
+ *     space-separated, for secret rotation). It also carries a timestamp that
+ *     has to be checked for replay.
+ *   - **Everyone else here** (Lemon Squeezy, Paddle, and a documented generic
+ *     shape) is verified the simpler way this endpoint always has: a plain
+ *     hex HMAC-SHA256 over the raw body, checked against one shared secret.
+ *
+ * Providers differ in payload shape too, so `normalizePolar()` / `normalize()`
+ * map the handful that matter onto one internal event. Adding a provider to
+ * the generic path means adding a case to `normalize()` and nothing else.
+ *
+ * NOTE on Polar's payload: the exact JSON path to the customer's email was
+ * not confirmed against a live delivery when this was written — it reads
+ * `data.customer.email` with a couple of fallbacks below. Log the first real
+ * webhook Polar sends this endpoint and adjust `normalizePolar()` if that
+ * path is wrong before relying on it. Polar's own recommended reconciliation
+ * key is `customer.external_id`, not email — see the comment on
+ * `planExternalId` below if you want to switch to that instead.
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -34,16 +56,6 @@ type NormalizedEvent = {
   externalId: string | null;
   expiresAt: Date | null;
 };
-
-function verify(rawBody: string, header: string | null, secret: string): boolean {
-  if (!header) return false;
-  const provided = header.trim().replace(/^sha256=/i, "");
-  const expected = createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
-  const a = Buffer.from(provided, "utf8");
-  const b = Buffer.from(expected, "utf8");
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
 
 /** Reads a nested value out of an unknown payload without reaching for `any`. */
 function dig(source: unknown, ...path: string[]): unknown {
@@ -64,6 +76,25 @@ const date = (v: unknown): Date | null => {
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
 };
+
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
+
+// ---------------------------------------------------------------------------
+// Generic HMAC path — Lemon Squeezy, Paddle, and the documented generic shape
+// ---------------------------------------------------------------------------
+
+function verifyGeneric(rawBody: string, header: string | null, secret: string): boolean {
+  if (!header) return false;
+  const provided = header.trim().replace(/^sha256=/i, "");
+  const expected = createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
+  if (provided.length !== expected.length) return false;
+  return timingSafeEqualStr(provided, expected);
+}
 
 function normalize(body: unknown): NormalizedEvent {
   // Lemon Squeezy
@@ -117,33 +148,125 @@ function normalize(body: unknown): NormalizedEvent {
   };
 }
 
-export async function POST(req: Request) {
-  const secret = process.env.PAYMENT_WEBHOOK_SECRET?.trim();
-  if (!secret || secret === "change-me") {
-    return fail("Billing webhooks are not configured on this install", 503);
-  }
+// ---------------------------------------------------------------------------
+// Polar — Standard Webhooks signing, different payload shape
+// ---------------------------------------------------------------------------
 
-  // Read the body ONCE as raw text. Signing over a re-serialized object is
-  // the most common way this check gets quietly defeated.
+const POLAR_TIMESTAMP_TOLERANCE_SECONDS = 300;
+
+/**
+ * Polar's secret (from the dashboard's webhook endpoint settings) is
+ * base64-encoded and may carry a `whsec_` prefix, matching the Standard
+ * Webhooks convention. Both are normalized away here before use as an HMAC
+ * key.
+ */
+function decodePolarSecret(secret: string): Buffer {
+  const stripped = secret.startsWith("whsec_") ? secret.slice("whsec_".length) : secret;
+  return Buffer.from(stripped, "base64");
+}
+
+function verifyPolar(
+  rawBody: string,
+  webhookId: string | null,
+  webhookTimestamp: string | null,
+  webhookSignature: string | null,
+  secret: string,
+): boolean {
+  if (!webhookId || !webhookTimestamp || !webhookSignature) return false;
+
+  const timestampSeconds = Number(webhookTimestamp);
+  if (!Number.isFinite(timestampSeconds)) return false;
+  const skewSeconds = Math.abs(Date.now() / 1000 - timestampSeconds);
+  if (skewSeconds > POLAR_TIMESTAMP_TOLERANCE_SECONDS) return false; // stale — possible replay
+
+  const signedContent = `${webhookId}.${webhookTimestamp}.${rawBody}`;
+  const expected = createHmac("sha256", decodePolarSecret(secret))
+    .update(signedContent, "utf8")
+    .digest("base64");
+
+  // The header can carry several space-separated `v1,<sig>` candidates
+  // (Polar rotates secrets by sending both old and new for a window).
+  return webhookSignature
+    .split(" ")
+    .map((candidate) => candidate.trim())
+    .filter(Boolean)
+    .map((candidate) => candidate.replace(/^v1,/, ""))
+    .some((candidate) => candidate.length === expected.length && timingSafeEqualStr(candidate, expected));
+}
+
+const POLAR_ACTIVATE_EVENTS = new Set(["subscription.active", "subscription.uncanceled", "subscription.resumed", "order.paid"]);
+const POLAR_DEACTIVATE_EVENTS = new Set(["subscription.canceled", "subscription.revoked", "subscription.past_due"]);
+
+function normalizePolar(body: unknown): NormalizedEvent {
+  const type = str(dig(body, "type")) ?? "";
+  const data = dig(body, "data");
+
+  return {
+    provider: "polar",
+    kind: POLAR_ACTIVATE_EVENTS.has(type) ? "activate" : POLAR_DEACTIVATE_EVENTS.has(type) ? "deactivate" : "ignore",
+    email:
+      str(dig(data, "customer", "email")) ??
+      str(dig(data, "customer_email")) ??
+      // Unconfirmed fallback for the order shape — verify against a real payload.
+      str(dig(data, "customer", "email_address")),
+    externalId:
+      str(dig(data, "customer", "external_id")) ?? str(dig(data, "id")),
+    expiresAt: date(dig(data, "current_period_end")) ?? date(dig(data, "ends_at")),
+  };
+}
+
+// ---------------------------------------------------------------------------
+
+export async function POST(req: Request) {
   const rawBody = await req.text();
 
-  const signature =
-    req.headers.get("x-nodpeak-signature") ??
-    req.headers.get("x-signature") ??
-    req.headers.get("paddle-signature");
+  // Polar identifies itself by its own header trio — check for those first,
+  // since it doesn't send any of the generic-path signature headers at all.
+  const polarWebhookId = req.headers.get("webhook-id");
+  const polarWebhookTimestamp = req.headers.get("webhook-timestamp");
+  const polarWebhookSignature = req.headers.get("webhook-signature");
+  const isPolarShaped = Boolean(polarWebhookId && polarWebhookTimestamp && polarWebhookSignature);
 
-  if (!verify(rawBody, signature, secret)) {
-    return fail("Invalid signature", 401);
+  let event: NormalizedEvent;
+
+  if (isPolarShaped) {
+    const polarSecret = process.env.POLAR_WEBHOOK_SECRET?.trim();
+    if (!polarSecret || polarSecret === "change-me") {
+      return fail("Polar webhooks are not configured on this install", 503);
+    }
+    if (!verifyPolar(rawBody, polarWebhookId, polarWebhookTimestamp, polarWebhookSignature, polarSecret)) {
+      return fail("Invalid signature", 401);
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return fail("Malformed JSON body", 400);
+    }
+    event = normalizePolar(body);
+  } else {
+    const secret = process.env.PAYMENT_WEBHOOK_SECRET?.trim();
+    if (!secret || secret === "change-me") {
+      return fail("Billing webhooks are not configured on this install", 503);
+    }
+
+    const signature =
+      req.headers.get("x-nodpeak-signature") ??
+      req.headers.get("x-signature") ??
+      req.headers.get("paddle-signature");
+
+    if (!verifyGeneric(rawBody, signature, secret)) {
+      return fail("Invalid signature", 401);
+    }
+
+    let body: unknown;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return fail("Malformed JSON body", 400);
+    }
+    event = normalize(body);
   }
-
-  let body: unknown;
-  try {
-    body = JSON.parse(rawBody);
-  } catch {
-    return fail("Malformed JSON body", 400);
-  }
-
-  const event = normalize(body);
 
   const allowed = (process.env.PAYMENT_PROVIDERS ?? "")
     .split(",")
