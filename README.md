@@ -8,7 +8,7 @@ One line of JavaScript collects reviews on your site, hands five-star customers 
 to your Google profile while they still feel like writing, and routes the unhappy ones
 to a private form that reaches you instead of the internet.
 
-Self-host it on a free ARM box, or let us run it for $10/mo.
+Self-host it on a free ARM box, or let us run it for $15/mo.
 
 [![CI](https://github.com/nodpeakapp/nodpeak/actions/workflows/ci.yml/badge.svg)](https://github.com/nodpeakapp/nodpeak/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-f59e0b.svg)](https://www.gnu.org/licenses/agpl-3.0)
@@ -140,7 +140,7 @@ Dashboard at `http://localhost:3000`, widget served at `http://localhost:3000/wi
 
 ## Self-host vs. managed cloud
 
-|                                | **Self-host** (free, AGPL) | **Managed cloud** ($10/mo) |
+|                                | **Self-host** (free, AGPL) | **Managed cloud** ($15/mo) |
 | ------------------------------ | -------------------------- | -------------------------- |
 | Review collection widget       | ✅ Unlimited                | ✅ Unlimited                |
 | Projects / websites            | ✅ Unlimited                | 25                         |
@@ -153,7 +153,7 @@ Dashboard at `http://localhost:3000`, widget served at `http://localhost:3000/wi
 | Uptime, patching, TLS renewal  | You                        | Us                         |
 | Deliverability for review invites | Your SMTP               | ✅ Warmed pool              |
 | Support                        | GitHub issues              | Email, 1 business day      |
-| Cost                           | ~$0 on an Oracle Ampere A1 free tier | $10/mo          |
+| Cost                           | ~$0 on an Oracle Ampere A1 free tier | $15/mo          |
 
 Both run the **same code**. The cloud plan is convenience and someone else's pager — not a
 feature gate. If you self-host and hit a wall, that's a bug, not an upsell.
