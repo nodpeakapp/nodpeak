@@ -58,4 +58,5 @@ export const LIMITS = {
   lead: Number(process.env.LEAD_RATE_LIMIT_PER_HOUR ?? 20),
   subscribe: Number(process.env.SUBSCRIBE_RATE_LIMIT_PER_HOUR ?? 20),
   linkCheck: 6,
+  graderLead: Number(process.env.GRADER_LEAD_RATE_LIMIT_PER_HOUR ?? 10),
 };

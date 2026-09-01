@@ -283,3 +283,29 @@ model UptimeCheck {
 
   @@index([projectId, checkedAt])
 }
+
+// ── Nodpeak's own marketing funnel ──────────────────────────────
+//
+// Not customer data. This table exists only for the free public
+// "SEO & Reputation Grader" (/grader) — visitors testing their own
+// site and leaving an email for the full report. It has no projectId
+// on purpose: it belongs to whoever operates this deployment, not to
+// any one customer's project. Gated behind ENABLE_GRADER — see
+// graderEnabled() in src/lib/env.ts — so it stays inert on a
+// self-hosted install unless that operator turns the tool on for
+// themselves.
+
+model GraderLead {
+  id String @id @default(cuid())
+
+  email      String
+  auditedUrl String
+  score      Int
+
+  sourceUrl String?
+  ipHash    String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([email])
+}

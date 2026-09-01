@@ -4,6 +4,17 @@ export function appUrl(): string {
   return raw.replace(/\/+$/, "");
 }
 
+/**
+ * The free public "SEO & Reputation Grader" (/grader) is Nodpeak's own
+ * top-of-funnel marketing tool, not a feature of any customer's project.
+ * It defaults OFF so a self-hosted install doesn't come with someone
+ * else's lead-gen page bolted onto their domain — only the canonical
+ * nodpeak.com deployment sets ENABLE_GRADER=true.
+ */
+export function graderEnabled(): boolean {
+  return (process.env.ENABLE_GRADER ?? "").trim().toLowerCase() === "true";
+}
+
 export function requireSecret(name: string): string {
   const v = process.env[name];
   if (!v || v.startsWith("change-me")) {
