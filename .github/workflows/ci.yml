@@ -15,7 +15,6 @@ jobs:
       DATABASE_URL: file:./ci.db
       AUTH_SECRET: ci-only-secret-not-for-real-use-00000000000000000000
       APP_URL: http://localhost:3000
-      NODE_ENV: production
       DEPLOYMENT_MODE: selfhost
 
     steps:
